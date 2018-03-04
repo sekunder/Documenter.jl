@@ -55,6 +55,23 @@ function Page(source::AbstractString, build::AbstractString)
     Page(source, build, elements, IdDict(), Globals())
 end
 
+
+# Document blueprints.
+# --------------------
+
+"""
+"""
+struct DocumentBlueprint
+    pages :: Dict{String, Page} # Markdown files only.
+    doctests :: Vector{Tuple{String, Page, Markdown.Code}}
+
+    DocumentBlueprint() = new(
+        Dict{String, Page}(),
+        Vector{Tuple{String, Page, Markdown.Code}}(),
+    )
+end
+
+
 # Document Nodes.
 # ---------------
 
@@ -148,7 +165,7 @@ to other page, reference to the [`Page`](@ref) object etc.
 mutable struct NavNode
     """
     `nothing` if the `NavNode` is a non-page node of the navigation tree, otherwise
-    the string should be a valid key in `doc.internal.pages`
+    the string should be a valid key in `doc.blueprint.pages`
     """
     page           :: Union{String, Nothing}
     """
@@ -211,7 +228,6 @@ Private state used to control the generation process.
 struct Internal
     assets  :: String             # Path where asset files will be copied to.
     remote  :: String             # The remote repo on github where this package is hosted.
-    pages   :: Dict{String, Page} # Markdown files only.
     navtree :: Vector{NavNode}           # A vector of top-level navigation items.
     navlist :: Vector{NavNode}           # An ordered list of `NavNode`s that point to actual pages
     headers :: Anchors.AnchorMap         # See `modules/Anchors.jl`. Tracks `Markdown.Header` objects.
@@ -231,8 +247,9 @@ end
 Represents an entire document.
 """
 struct Document
-    user     :: User     # Set by the user via `makedocs`.
-    internal :: Internal # Computed values.
+    user      :: User     # Set by the user via `makedocs`.
+    internal  :: Internal # Computed values.
+    blueprint :: DocumentBlueprint
 end
 
 function Document(;
@@ -298,7 +315,6 @@ function Document(;
     internal = Internal(
         Utilities.assetsdir(),
         Utilities.getremote(root),
-        Dict{String, Page}(),
         [],
         [],
         Anchors.AnchorMap(),
@@ -310,7 +326,7 @@ function Document(;
         Dict{Markdown.Link, String}(),
         Set{Symbol}(),
     )
-    Document(user, internal)
+    Document(user, internal, DocumentBlueprint())
 end
 
 ## Methods
@@ -319,7 +335,7 @@ function addpage!(doc::Document, src::AbstractString, dst::AbstractString)
     page = Page(src, dst)
     # page's identifier is the path relative to the `doc.user.source` directory
     name = normpath(relpath(src, doc.user.source))
-    doc.internal.pages[name] = page
+    doc.blueprint.pages[name] = page
 end
 
 """

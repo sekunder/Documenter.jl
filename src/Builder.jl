@@ -11,7 +11,9 @@ import ..Documenter:
     Anchors,
     Documents,
     Documenter,
-    Utilities
+    Utilities,
+    Walkers,
+    Walkers2
 
 import .Utilities: Selectors
 
@@ -24,6 +26,7 @@ using Compat, DocStringExtensions
 The default document processing "pipeline", which consists of the following actions:
 
 - [`SetupBuildDirectory`](@ref)
+- [`PopulateDocumentBlueprint`](@ref)
 - [`ExpandTemplates`](@ref)
 - [`CrossReferences`](@ref)
 - [`CheckDocument`](@ref)
@@ -37,6 +40,11 @@ abstract type DocumentPipeline <: Selectors.AbstractSelector end
 Creates the correct directory layout within the `build` folder and parses markdown files.
 """
 abstract type SetupBuildDirectory <: DocumentPipeline end
+
+"""
+Populates the `.blueprint` field of the [`Documents.Document`](@ref) object.
+"""
+abstract type PopulateDocumentBlueprint <: DocumentPipeline end
 
 """
 Executes a sequence of actions on each node of the parsed markdown files in turn.
@@ -64,12 +72,13 @@ Writes the document tree to the `build` directory.
 """
 abstract type RenderDocument <: DocumentPipeline end
 
-Selectors.order(::Type{SetupBuildDirectory})   = 1.0
-Selectors.order(::Type{ExpandTemplates})       = 2.0
-Selectors.order(::Type{CrossReferences})       = 3.0
-Selectors.order(::Type{CheckDocument})         = 4.0
-Selectors.order(::Type{Populate})              = 5.0
-Selectors.order(::Type{RenderDocument})        = 6.0
+Selectors.order(::Type{SetupBuildDirectory})       = 1.0
+Selectors.order(::Type{PopulateDocumentBlueprint}) = 1.1
+Selectors.order(::Type{ExpandTemplates})           = 2.0
+Selectors.order(::Type{CrossReferences})           = 3.0
+Selectors.order(::Type{CheckDocument})             = 4.0
+Selectors.order(::Type{Populate})                  = 5.0
+Selectors.order(::Type{RenderDocument})            = 6.0
 
 Selectors.matcher(::Type{T}, doc::Documents.Document) where {T <: DocumentPipeline} = true
 
@@ -152,7 +161,7 @@ function walk_navpages(visible, title, src, children, parent, doc)
     parent_visible = (parent === nothing) || parent.visible
     if src !== nothing
         src = normpath(src)
-        src in keys(doc.internal.pages) || error("'$src' is not an existing page!")
+        src in keys(doc.blueprint.pages) || error("'$src' is not an existing page!")
     end
     nn = Documents.NavNode(src, title, parent)
     (src === nothing) || push!(doc.internal.navlist, nn)
@@ -173,6 +182,48 @@ walk_navpages(p::Pair, parent, doc) = walk_navpages(p.first, p.second, parent, d
 walk_navpages(ps::Vector, parent, doc) = [walk_navpages(p, parent, doc)::Documents.NavNode for p in ps]
 walk_navpages(src::String, parent, doc) = walk_navpages(true, nothing, src, [], parent, doc)
 
+
+function Selectors.runner(::Type{PopulateDocumentBlueprint}, doc::Documents.Document)
+    Utilities.log(doc, "populating document blueprint.")
+
+    # find all the doctest blocks in the pages
+    for (src, page) in doc.blueprint.pages
+        println(src)
+        doctest(page, doc)
+    end
+end
+
+function doctest(page::Documents.Page, doc::Documents.Document)
+    #=Walkers2.walk(page.globals.meta, page.elements) do block
+        isa(block, Markdown.Code) || return true
+        codeblock_types = split(block.language)
+        length(codeblock_types) > 0  || return true
+        codeblock_type = first(codeblock_types)
+        if codeblock_type == "jldoctest"
+            @show block
+        elseif codeblock_type == "@meta"
+            @show block
+            for (ex, str) in Utilities.parseblock(block.code, doc, page)
+                @show ex str
+            end
+        else
+            return true
+        end
+        #doctest(block, page.globals.meta, doc, page)
+        return false
+    end=#
+    Walkers2.walk(page.elements) do meta, parent, element
+        isa(element, Markdown.Code) || return
+        isblockparent(parent) || return
+        @show parent element
+    end
+end
+
+function isblockparent(element)
+    (element === nothing) ||
+    isa(element, Markdown.MD) ||
+    isa(element, Markdown.Admonition)
+end
 
 function Selectors.runner(::Type{ExpandTemplates}, doc::Documents.Document)
     Utilities.log(doc, "expanding markdown templates.")

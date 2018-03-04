@@ -5,7 +5,6 @@ module Walkers
 
 import ..Documenter:
     Anchors,
-    Builder,
     Documents,
     Expanders,
     Formats,

@@ -23,7 +23,7 @@ Format and print a message to the user.
 """
 log(msg) = __log__[] ? printstyled(stdout, "Documenter: ", msg, "\n", color=:magenta) : nothing
 
-# Print logging output to the "real" stdout.
+# Print logging output to the "real" stdout.struct ThematicBreak <: MarkdownBlockNode end
 function log(doc, msg)
     __log__[] && printstyled(stdout, "Documenter: ", msg, "\n", color=:magenta)
     return nothing
@@ -630,5 +630,6 @@ include("DOM.jl")
 include("MDFlatten.jl")
 include("TextDiff.jl")
 include("Selectors.jl")
+include("Markdown2.jl")
 
 end

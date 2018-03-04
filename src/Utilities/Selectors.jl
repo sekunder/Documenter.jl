@@ -69,6 +69,7 @@ The module provides the following interface for creating selectors:
 """
 module Selectors
 
+using DocStringExtensions
 using Compat
 import Compat.InteractiveUtils: subtypes
 
