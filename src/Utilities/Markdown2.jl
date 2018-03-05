@@ -62,7 +62,15 @@ struct BlockQuote <: MarkdownBlockNode
     nodes :: Vector{MarkdownBlockNode}
 end
 
-struct List <: MarkdownBlockNode end
+"""
+If `.orderedstart` is `nothing` then the list is unordered. Otherwise is specifies the first
+number in the list.
+"""
+struct List <: MarkdownBlockNode
+    tight :: Bool
+    orderedstart :: Union{Int, Nothing}
+    items :: Vector{Vector{MarkdownBlockNode}} # TODO: Better types?
+end
 
 # Non-Commonmark extensions
 struct DisplayMath <: MarkdownBlockNode
@@ -74,8 +82,17 @@ struct Footnote <: MarkdownBlockNode
     nodes :: Vector{MarkdownBlockNode} # Footnote is a container block
 end
 
-struct Table <: MarkdownBlockNode end
-struct Admonition <: MarkdownBlockNode end
+struct Table <: MarkdownBlockNode
+    align :: Vector{Symbol}
+    cells :: Array{Vector{MarkdownInlineNode}, 2} # TODO: better type?
+    # Note: Table is _not_ a container type -- the cells can only contan inlines.
+end
+
+struct Admonition <: MarkdownBlockNode
+    category :: String
+    title :: String
+    nodes :: Vector{MarkdownBlockNode} # Admonition is a container block
+end
 
 # Inline nodes
 # ============
@@ -102,7 +119,12 @@ struct Link <: MarkdownInlineNode
     nodes :: Vector{MarkdownInlineNode}
 end
 
-struct Image <: MarkdownInlineNode end
+struct Image <: MarkdownInlineNode
+    destination :: String
+    description :: String
+    #title :: String # the parser in Base does not support this currently
+    #nodes :: Vector{MarkdownInlineNode} # the parser in Base does not parse the description currently
+end
 #struct InlineHTML <: MarkdownInlineNode end # the parser in Base does not support this currently
 struct LineBreak <: MarkdownInlineNode end
 
@@ -130,18 +152,25 @@ _convert_block(b::Markdown.Header{N}) where N = Heading(N, _convert_inline(b.tex
 _convert_block(b::Markdown.Code) = CodeBlock(b.language, b.code)
 _convert_block(b::Markdown.Paragraph) = Paragraph(_convert_inline(b.content))
 _convert_block(b::Markdown.BlockQuote) = BlockQuote(_convert_block(b.content))
+function _convert_block(b::Markdown.List)
+    tight = all(equalto(1), length.(b.items))
+    orderedstart = (b.ordered == -1) ? nothing : b.ordered
+    List(tight, orderedstart, _convert_block.(b.items))
+end
 
-# struct List <: MarkdownBlockNode end
-#
-# # Non-Commonmark extensions
-# struct DisplayMath <: MarkdownBlockNode end
+# Non-Commonmark extensions
 _convert_block(b::Markdown.LaTeX) = DisplayMath(b.formula)
-# struct FootnoteDefinition <: MarkdownBlockNode end
 _convert_block(b::Markdown.Footnote) = Footnote(b.id, _convert_block(b.text))
-# struct Table <: MarkdownBlockNode end
-# struct Admonition <: MarkdownBlockNode end
-
-
+function _convert_block(b::Markdown.Table)
+    @assert all(equalto(length(b.align)), length.(b.rows)) # TODO: error
+    cells = [_convert_inline(b.rows[i][j]) for i = 1:length(b.rows), j = 1:length(b.align)]
+    @show typeof(cells)
+    Table(
+        b.align,
+        [_convert_inline(b.rows[i][j]) for i = 1:length(b.rows), j = 1:length(b.align)]
+    )
+end
+_convert_block(b::Markdown.Admonition) = Admonition(b.category, b.title, _convert_block(b.content))
 
 
 _convert_inline(xs::Vector) = MarkdownInlineNode[_convert_inline(x) for x in xs]
@@ -153,15 +182,12 @@ end
 _convert_inline(s::Markdown.Bold) = Strong(_convert_inline(s.text))
 _convert_inline(s::Markdown.Italic) = Emphasis(_convert_inline(s.text))
 _convert_inline(s::Markdown.Link) = Link(s.url, _convert_inline(s.text))
+_convert_inline(s::Markdown.Image) = Image(s.url, s.alt)
+# struct InlineHTML <: MarkdownInlineNode end # the parser in Base does not support this currently
+_convert_inline(::Markdown.LineBreak) = LineBreak()
 
-# struct Image <: MarkdownInlineNode end
-# #struct InlineHTML <: MarkdownInlineNode end # the parser in Base does not support this currently
-# struct LineBreak <: MarkdownInlineNode end
-#
-# # Non-Commonmark extensions
-# struct InlineMath <: MarkdownInlineNode end
+# Non-Commonmark extensions
 _convert_inline(s::Markdown.LaTeX) = InlineMath(s.formula)
-# struct Footnote <: MarkdownInlineNode end
 function _convert_inline(s::Markdown.Footnote)
     @assert s.text === nothing # footnote references should not have any content, TODO: error
     FootnoteReference(s.id)
