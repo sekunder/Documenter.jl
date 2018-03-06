@@ -212,17 +212,12 @@ function doctest(page::Documents.Page, doc::Documents.Document)
         #doctest(block, page.globals.meta, doc, page)
         return false
     end=#
-    Walkers2.walk(page.elements) do meta, parent, element
-        isa(element, Markdown.Code) || return
-        isblockparent(parent) || return
+    Walkers2._walk_block(Dict{Any,Any}(), page.elements) do nodeclass, element
+        isa(element, Markdown.Code) || return true
+        nodeclass == Walkers2.block || return true
         @show parent element
+        return true
     end
-end
-
-function isblockparent(element)
-    (element === nothing) ||
-    isa(element, Markdown.MD) ||
-    isa(element, Markdown.Admonition)
 end
 
 function Selectors.runner(::Type{ExpandTemplates}, doc::Documents.Document)

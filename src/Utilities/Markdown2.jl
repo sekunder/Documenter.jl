@@ -193,4 +193,69 @@ function _convert_inline(s::Markdown.Footnote)
     FootnoteReference(s.id)
 end
 
+
+# printmd2
+const INDENT = ".   "
+
+printmd2(xs :: Markdown2.MD) = printmd2(xs.nodes)
+
+function printmd2(xs :: Vector; indent=0)
+    for x in xs
+        printmd2(x; indent = indent)
+    end
+end
+
+function printmd2(x::T; indent=0) where T <: Markdown2.MarkdownNode
+    if :nodes in fieldnames(T)
+        print(INDENT^indent)
+        print(typeof(x))
+
+        print(" : ")
+        for field in fieldnames(T)
+            field == :nodes && continue
+            print("$field='$(getfield(x, field))' ")
+        end
+
+        println()
+        printmd2(x.nodes; indent = indent + 1)
+    else
+        print(INDENT^indent)
+        print(x)
+        println()
+    end
+end
+
+function printmd2(x::Markdown2.List; indent=0)
+    print(INDENT^indent)
+    print(typeof(x))
+
+    print(" : ")
+    for field in fieldnames(Markdown2.List)
+        field == :items && continue
+        print("$field='$(getfield(x, field))' ")
+    end
+
+    println()
+    printmd2(x.items; indent = indent + 1)
+end
+
+function printmd2(x::Markdown2.Table; indent=0)
+    print(INDENT^indent)
+    print(typeof(x))
+
+    print(" : ")
+    for field in fieldnames(Markdown2.Table)
+        field == :cells && continue
+        print("$field='$(getfield(x, field))' ")
+    end
+
+    println()
+
+    for i = 1:size(x.cells, 1), j = 1:size(x.cells, 1)
+        print(INDENT^(indent+1))
+        println("cell $i - $j")
+        printmd2(x.cells[i,j]; indent = indent + 2)
+    end
+end
+
 end

@@ -4,10 +4,13 @@ Provides the [`walk`](@ref) function.
 module Walkers2
 
 import ..Documenter:
-    Utilities
+    Utilities,
+    Utilities.Markdown2
 
 using Compat, DocStringExtensions
-import Compat: Markdown
+using Compat.Markdown
+
+@enum MDNodeClass block inline
 
 """
 $(SIGNATURES)
@@ -15,56 +18,57 @@ $(SIGNATURES)
 Calls `f(meta, parent, element)` on `element` and any of its child elements. `meta` is a
 `Dict{Symbol,Any}` containing metadata such as current module.
 """
-walk(f, element) = _walk(f, Dict{Symbol,Any}(), nothing, element)
+walk(f, element::Markdown.MD) = _walk_block(f, Dict{Symbol,Any}(), element.content)
 
-function _walk(f, meta, parent, block::Vector)
-    for each in block
-        _walk(f, meta, parent, each)
+function _walk_block(f, meta, xs::Vector)
+    for x in xs
+        _walk_block(f, meta, x)
     end
 end
 
-const MDContentElements = Union{
-    Markdown.MD,
-    Markdown.BlockQuote,
-    Markdown.Paragraph,
-    Markdown.MD,
-    Markdown.Admonition,
-}
-function walk(f, meta, parent, element::MDContentElements)
-    f(meta, parent, element)
-    _walk(f, meta, element, element.content)
+function _walk_block(f, meta, b::Union{Markdown.BlockQuote, Markdown.Admonition})
+    f(block, b) || return
+    _walk_block(f, meta, b.content)
 end
 
-const MDTextElements = Union{
+_walk_block(f, meta, b::Markdown.Paragraph) = f(block, b) ? _walk_inline(f, meta, b.content) : nothing
+_walk_block(f, meta, b::Markdown.Footnote) = f(block, b) ? _walk_block(f, meta, b.text) : nothing
+_walk_block(f, meta, b::Markdown.Header) = f(block, b) ? _walk_inline(f, meta, b.text) : nothing
+
+
+function _walk_block(f, meta, b::Markdown.List)
+    f(block, b) || return
+    for item in b.items
+        _walk_block.(f, meta, b.items)
+    end
+end
+
+function _walk_block(f, meta, b::Markdown.Table)
+    f(block, b) || return
+    for row in b.rows, cell in row
+        _walk_inline(f, meta, cell)
+    end
+end
+
+#_walk_block(f, meta, b::Union{Markdown.HorizontalRule, Markdown.Code, Markdown.LaTeX}) = (f(block, b); nothing)
+_walk_block(f, meta, b) = (f(block, b); nothing)
+
+# Non-Commonmark extensions
+
+
+function _walk_inline(f, meta, xs::Vector)
+    for x in xs
+        _walk_inline(f, meta, x)
+    end
+end
+
+const MDInlineTextElements = Union{
     Markdown.Bold,
-    Markdown.Header,
     Markdown.Italic,
-    Markdown.Footnote,
     Markdown.Link,
 }
-function _walk(f, meta, parent, element::MDTextElements)
-    f(meta, parent, element)
-    _walk(f, meta, element, element.text)
-end
+_walk_inline(f, meta, s::MDInlineTextElements) = f(inline, s) ? _walk_inline(f, meta, s.text) : nothing
 
-function _walk(f, meta, parent, element::Markdown.Image)
-    f(meta, parent, element)
-    _walk(f, meta, element, element.alt)
-end
-
-function _walk(f, meta, parent, element::Markdown.Table)
-    f(meta, parent, element)
-    _walk(f, meta, element, element.rows)
-end
-
-function _walk(f, meta, parent, element::Markdown.List)
-    f(meta, parent, element)
-    _walk(f, meta, element, element.items)
-end
-
-function _walk(f, meta, parent, element)
-    f(meta, parent, element)
-    nothing
-end
+_walk_inline(f, meta, s) = (f(inline, s); nothing)
 
 end
